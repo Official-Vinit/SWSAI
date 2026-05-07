@@ -1,6 +1,9 @@
 import crypto from "crypto"
 import Document from "../models/Document.js"
-import { notifyBulkUploadComplete } from "../services/notificationService.js"
+import {
+  notifyBulkUploadComplete,
+  notifyUploadFailed,
+} from "../services/notificationService.js"
 
 const buildStoredName = (originalName) =>
   `${Date.now()}-${crypto.randomUUID()}-${originalName.replace(/[^a-zA-Z0-9.-]/g, "_")}`
@@ -37,7 +40,7 @@ export const uploadDocuments = async (req, res, next) => {
     const responseDocuments = documents.map(toDocumentResponse)
 
     if (files.length > 3) {
-      notifyBulkUploadComplete({
+      await notifyBulkUploadComplete({
         count: files.length,
         documents: responseDocuments,
         notificationId,
@@ -50,6 +53,14 @@ export const uploadDocuments = async (req, res, next) => {
       documents: responseDocuments,
     })
   } catch (error) {
+    if ((req.files || []).length > 3) {
+      await notifyUploadFailed({
+        count: req.files.length,
+        error: error.message,
+        notificationId: req.body?.notificationId || null,
+      })
+    }
+
     return next(error)
   }
 }

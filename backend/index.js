@@ -6,16 +6,18 @@ import http from "http"
 import connectDb from "./config/db.js"
 import { initializeSocket } from "./config/socket.js"
 import documentRoutes from "./routes/documentRoutes.js"
+import notificationRoutes from "./routes/notificationRoutes.js"
 
 
 const PORT = process.env.PORT || 5000
 const app = express()
 const server = http.createServer(app)
 
-app.use(cors({ origin: process.env.CLIENT_URL || "*" }))
+app.use(cors({ origin: process.env.CLIENT_URL}))
 app.use(express.json())
 
 app.use("/api/documents", documentRoutes)
+app.use("/api/notifications", notificationRoutes)
 
 app.use((error, req, res, next) => {
   console.error(error)

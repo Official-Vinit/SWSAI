@@ -4,7 +4,7 @@ import "./App.css"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, "")
+import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, "")
 const BULK_UPLOAD_THRESHOLD = 3
 
 const formatBytes = (bytes = 0) => {
