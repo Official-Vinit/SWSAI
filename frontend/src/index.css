@@ -1,1 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=Livvic:wght@400;500;600;700&display=swap");
 
+:root {
+  color: #10213f;
+  font-family: "Livvic", system-ui, sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(30, 100, 216, 0.13), transparent 32rem),
+    #f3f8ff;
+  margin: 0;
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100vh;
+}

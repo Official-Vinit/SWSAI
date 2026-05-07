@@ -1,1 +1,297 @@
+.page-shell {
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 48px 20px;
+}
 
+.upload-section,
+.queue-section,
+.documents-section {
+  background: #ffffff;
+  border: 1px solid #d9e6fb;
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(27, 91, 174, 0.08);
+  padding: 28px;
+}
+
+.queue-section,
+.documents-section {
+  margin-top: 22px;
+}
+
+.section-title {
+  margin-bottom: 24px;
+}
+
+.section-title span {
+  color: #1e64d8;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.section-title h1,
+.panel-heading h2 {
+  color: #10213f;
+  margin: 0;
+}
+
+.section-title h1 {
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  line-height: 1.05;
+}
+
+.section-title p {
+  color: #587092;
+  font-size: 1.05rem;
+  margin: 10px 0 0;
+}
+
+.drop-zone {
+  align-items: center;
+  background: #f7fbff;
+  border: 2px dashed #9ec3ff;
+  border-radius: 8px;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  min-height: 178px;
+  padding: 26px;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.drop-zone.is-dragging {
+  background: #eaf3ff;
+  border-color: #1e64d8;
+}
+
+.file-input {
+  display: none;
+}
+
+.drop-copy {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.pdf-badge {
+  align-items: center;
+  background: #1e64d8;
+  border-radius: 8px;
+  color: #ffffff;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  font-weight: 700;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.drop-copy h2 {
+  color: #10213f;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+
+.drop-copy p {
+  color: #587092;
+  margin: 0;
+}
+
+button,
+.download-button {
+  align-items: center;
+  background: #1e64d8;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+button:hover,
+.download-button:hover {
+  background: #174fa9;
+}
+
+.panel-heading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel-heading h2 {
+  font-size: 1.35rem;
+}
+
+.panel-heading span {
+  color: #587092;
+  font-weight: 600;
+}
+
+.upload-list {
+  display: grid;
+  gap: 12px;
+}
+
+.upload-card {
+  border: 1px solid #d9e6fb;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.file-summary,
+.progress-line {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.file-summary h3 {
+  color: #10213f;
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.file-summary p {
+  color: #587092;
+  margin: 0;
+}
+
+.status {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-transform: capitalize;
+}
+
+.status-pending {
+  background: #edf2f7;
+  color: #40536d;
+}
+
+.status-uploading {
+  background: #dcecff;
+  color: #1e64d8;
+}
+
+.status-complete {
+  background: #ddf7e8;
+  color: #14743b;
+}
+
+.status-failed {
+  background: #ffe1e1;
+  color: #b42318;
+}
+
+.progress-line {
+  margin-top: 14px;
+}
+
+.progress-track {
+  background: #e7effb;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.progress-fill {
+  background: #1e64d8;
+  height: 100%;
+  transition: width 160ms ease;
+}
+
+.progress-line strong {
+  color: #10213f;
+  font-size: 0.92rem;
+  min-width: 44px;
+  text-align: right;
+}
+
+.message,
+.table-message {
+  color: #b42318;
+  margin: 10px 0 0;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  min-width: 720px;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid #d9e6fb;
+  padding: 14px 12px;
+  text-align: left;
+}
+
+th {
+  background: #f7fbff;
+  color: #45617f;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+td {
+  color: #45617f;
+}
+
+td:first-child {
+  color: #10213f;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding: 24px 14px;
+  }
+
+  .upload-section,
+  .queue-section,
+  .documents-section {
+    padding: 18px;
+  }
+
+  .drop-zone,
+  .drop-copy,
+  .file-summary,
+  .panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
+}
