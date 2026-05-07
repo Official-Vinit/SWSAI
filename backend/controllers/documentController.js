@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import Document from "../models/Document.js"
+import { notifyBulkUploadComplete } from "../services/notificationService.js"
 
 const buildStoredName = (originalName) =>
   `${Date.now()}-${crypto.randomUUID()}-${originalName.replace(/[^a-zA-Z0-9.-]/g, "_")}`
@@ -17,6 +18,7 @@ const toDocumentResponse = (document) => ({
 export const uploadDocuments = async (req, res, next) => {
   try {
     const files = req.files || []
+    const notificationId = req.body?.notificationId || null
 
     if (!files.length) {
       return res.status(400).json({ message: "Please upload at least one PDF file." })
@@ -32,7 +34,21 @@ export const uploadDocuments = async (req, res, next) => {
       }))
     )
 
-    return res.status(201).json({ documents: documents.map(toDocumentResponse) })
+    const responseDocuments = documents.map(toDocumentResponse)
+
+    if (files.length > 3) {
+      notifyBulkUploadComplete({
+        count: files.length,
+        documents: responseDocuments,
+        notificationId,
+      })
+    }
+
+    return res.status(201).json({
+      backgroundProcessing: files.length > 3,
+      notificationId,
+      documents: responseDocuments,
+    })
   } catch (error) {
     return next(error)
   }

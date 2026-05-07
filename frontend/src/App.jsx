@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { io } from "socket.io-client"
 import "./App.css"
 
-const API_URL = import.meta.env.VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, "")
+const BULK_UPLOAD_THRESHOLD = 3
 
 const formatBytes = (bytes = 0) => {
   if (!bytes) return "0 B"
@@ -22,8 +26,15 @@ const formatDate = (date) =>
     timeStyle: "short",
   }).format(new Date(date))
 
-const createUploadItem = (file) => ({
+const formatTime = (date) =>
+  new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date))
+
+const createUploadItem = (file, batchId = null) => ({
   id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+  batchId,
   file,
   name: file.name,
   size: file.size,
@@ -36,6 +47,9 @@ const createUploadItem = (file) => ({
 function App() {
   const [documents, setDocuments] = useState([])
   const [queue, setQueue] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [bulkBanner, setBulkBanner] = useState(null)
+  const [isBulkExpanded, setIsBulkExpanded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [listError, setListError] = useState("")
@@ -45,6 +59,8 @@ function App() {
     () => queue.filter((item) => item.status === "complete").length,
     [queue]
   )
+  const hasBulkQueue = queue.some((item) => item.batchId)
+  const visibleQueue = hasBulkQueue && !isBulkExpanded ? queue.slice(0, 3) : queue
 
   const fetchDocuments = useCallback(async () => {
     setListError("")
@@ -70,9 +86,46 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [fetchDocuments])
 
+  useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"],
+    })
+
+    socket.on("bulk-upload:complete", (payload) => {
+      setNotifications((currentNotifications) => [payload, ...currentNotifications])
+      setBulkBanner(null)
+      setQueue((currentQueue) =>
+        currentQueue.map((item) =>
+          item.batchId && item.batchId === payload.notificationId
+            ? { ...item, status: "complete", progress: 100 }
+            : item
+        )
+      )
+      fetchDocuments()
+    })
+
+    return () => socket.disconnect()
+  }, [fetchDocuments])
+
   const updateQueueItem = (id, patch) => {
     setQueue((currentQueue) =>
       currentQueue.map((item) => (item.id === id ? { ...item, ...patch } : item))
+    )
+  }
+
+  const markBatch = (batchId, patch, options = {}) => {
+    setQueue((currentQueue) =>
+      currentQueue.map((item) => {
+        if (item.batchId !== batchId) {
+          return item
+        }
+
+        if (options.preserveComplete && item.status === "complete") {
+          return item
+        }
+
+        return { ...item, ...patch }
+      })
     )
   }
 
@@ -120,15 +173,63 @@ function App() {
     request.send(formData)
   }
 
+  const uploadBulkFiles = (items, batchId) => {
+    const formData = new FormData()
+    formData.append("notificationId", batchId)
+    items.forEach((item) => formData.append("documents", item.file))
+
+    markBatch(batchId, { status: "uploading", progress: 0, message: "" })
+
+    const request = new XMLHttpRequest()
+    request.open("POST", `${API_URL}/documents/upload`)
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+
+      markBatch(batchId, {
+        progress: Math.round((event.loaded / event.total) * 90),
+      })
+    }
+
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        markBatch(batchId, {
+          progress: 95,
+          message: "Waiting for server confirmation...",
+        }, { preserveComplete: true })
+        return
+      }
+
+      let message = "Bulk upload failed."
+      try {
+        message = JSON.parse(request.responseText).message || message
+      } catch {
+        message = request.statusText || message
+      }
+
+      setBulkBanner(null)
+      markBatch(batchId, { status: "failed", message })
+    }
+
+    request.onerror = () => {
+      setBulkBanner(null)
+      markBatch(batchId, {
+        status: "failed",
+        message: "Unable to connect to the backend.",
+      })
+    }
+
+    request.send(formData)
+  }
+
   const handleFiles = (fileList) => {
     const selectedFiles = Array.from(fileList || [])
     const pdfFiles = selectedFiles.filter(
       (file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     )
     const skippedCount = selectedFiles.length - pdfFiles.length
-    const uploadItems = pdfFiles.map(createUploadItem)
 
-    if (!uploadItems.length) {
+    if (!pdfFiles.length) {
       if (skippedCount) {
         setQueue((currentQueue) => [
           {
@@ -146,8 +247,11 @@ function App() {
       return
     }
 
+    const isBulkUpload = pdfFiles.length > BULK_UPLOAD_THRESHOLD
+    const batchId = isBulkUpload ? crypto.randomUUID() : null
+    const uploadItems = pdfFiles.map((file) => createUploadItem(file, batchId))
+
     setQueue((currentQueue) => [...uploadItems, ...currentQueue])
-    uploadItems.forEach(uploadFile)
 
     if (skippedCount) {
       setQueue((currentQueue) =>
@@ -158,6 +262,18 @@ function App() {
         )
       )
     }
+
+    if (isBulkUpload) {
+      setBulkBanner({
+        batchId,
+        message: `Upload in progress — processing ${pdfFiles.length} files in background.`,
+      })
+      setIsBulkExpanded(false)
+      uploadBulkFiles(uploadItems, batchId)
+      return
+    }
+
+    uploadItems.forEach(uploadFile)
   }
 
   const handleInputChange = (event) => {
@@ -173,6 +289,16 @@ function App() {
 
   return (
     <main className="page-shell">
+      <div className="notification-stack">
+        {bulkBanner && <div className="banner">{bulkBanner.message}</div>}
+        {notifications.map((notification) => (
+          <div className="toast" key={`${notification.timestamp}-${notification.message}`}>
+            <strong>{notification.message}</strong>
+            <span>{formatTime(notification.timestamp)}</span>
+          </div>
+        ))}
+      </div>
+
       <section className="upload-section">
         <div className="section-title">
           <span>File Upload</span>
@@ -213,22 +339,25 @@ function App() {
       </section>
 
       {queue.length > 0 && (
-        <section className="queue-section">
+        <section className={`queue-section${hasBulkQueue ? " is-minimal" : ""}`}>
           <div className="panel-heading">
-            <h2>Upload progress</h2>
+            <div>
+              <h2>Upload progress</h2>
+              {hasBulkQueue && <p>Bulk uploads stay compact while processing.</p>}
+            </div>
             <span>
               {completedCount} of {queue.length} complete
             </span>
           </div>
 
           <div className="upload-list">
-            {queue.map((item) => (
+            {visibleQueue.map((item) => (
               <article className="upload-card" key={item.id}>
                 <div className="file-summary">
                   <div>
                     <h3>{item.name}</h3>
                     <p>
-                      {formatBytes(item.size)} · {item.type || "PDF"}
+                      {formatBytes(item.size)} - {item.type || "PDF"}
                     </p>
                   </div>
                   <span className={`status status-${item.status}`}>
@@ -250,6 +379,16 @@ function App() {
               </article>
             ))}
           </div>
+
+          {hasBulkQueue && queue.length > 3 && (
+            <button
+              className="toggle-button"
+              type="button"
+              onClick={() => setIsBulkExpanded((current) => !current)}
+            >
+              {isBulkExpanded ? "Show less" : `Show all ${queue.length} files`}
+            </button>
+          )}
         </section>
       )}
 
