@@ -6,7 +6,7 @@ const toNotificationPayload = (notification) => ({
   message: notification.message,
   type: notification.type,
   read: notification.read,
-  timestamp: notification.createdAt,
+  timestamp: notification.timestamp || notification.createdAt,
   createdAt: notification.createdAt,
   updatedAt: notification.updatedAt,
 })

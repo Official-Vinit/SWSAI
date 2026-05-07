@@ -4,7 +4,7 @@ import "./App.css"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 const SOCKET_URL =
-import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, "")
+  import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, "")
 const BULK_UPLOAD_THRESHOLD = 3
 
 const formatBytes = (bytes = 0) => {
@@ -28,8 +28,8 @@ const formatDate = (date) =>
 
 const formatTime = (date) =>
   new Intl.DateTimeFormat("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(date))
 
 const createUploadItem = (file, batchId = null) => ({
@@ -44,15 +44,24 @@ const createUploadItem = (file, batchId = null) => ({
   message: "",
 })
 
+const normalizeNotification = (notification) => ({
+  ...notification,
+  timestamp: notification.timestamp || notification.createdAt,
+})
+
 function App() {
   const [documents, setDocuments] = useState([])
   const [queue, setQueue] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [liveToasts, setLiveToasts] = useState([])
   const [bulkBanner, setBulkBanner] = useState(null)
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false)
   const [isBulkExpanded, setIsBulkExpanded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [listError, setListError] = useState("")
+  const [notificationError, setNotificationError] = useState("")
   const inputRef = useRef(null)
 
   const completedCount = useMemo(
@@ -81,10 +90,53 @@ function App() {
     }
   }, [])
 
+  const fetchNotifications = useCallback(async () => {
+    setNotificationError("")
+
+    try {
+      const response = await fetch(`${API_URL}/notifications`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not load notifications.")
+      }
+
+      setNotifications((data.notifications || []).map(normalizeNotification))
+      setUnreadCount(data.unreadCount || 0)
+    } catch (error) {
+      setNotificationError(error.message)
+    }
+  }, [])
+
   useEffect(() => {
-    const timer = window.setTimeout(fetchDocuments, 0)
+    const timer = window.setTimeout(() => {
+      fetchDocuments()
+      fetchNotifications()
+    }, 0)
+
     return () => window.clearTimeout(timer)
-  }, [fetchDocuments])
+  }, [fetchDocuments, fetchNotifications])
+
+  const addRealtimeNotification = useCallback((payload) => {
+    const notification = normalizeNotification(payload)
+
+    setNotifications((currentNotifications) => {
+      const existingNotification = currentNotifications.find(
+        (item) => item._id === notification._id
+      )
+      const withoutDuplicate = currentNotifications.filter(
+        (item) => item._id !== notification._id
+      )
+
+      if (!notification.read && !existingNotification) {
+        setUnreadCount((currentCount) => currentCount + 1)
+      }
+
+      return [notification, ...withoutDuplicate]
+    })
+
+    setLiveToasts((currentToasts) => [notification, ...currentToasts].slice(0, 3))
+  }, [])
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -92,7 +144,7 @@ function App() {
     })
 
     socket.on("bulk-upload:complete", (payload) => {
-      setNotifications((currentNotifications) => [payload, ...currentNotifications])
+      addRealtimeNotification(payload)
       setBulkBanner(null)
       setQueue((currentQueue) =>
         currentQueue.map((item) =>
@@ -104,8 +156,26 @@ function App() {
       fetchDocuments()
     })
 
+    socket.on("upload:failed", (payload) => {
+      addRealtimeNotification(payload)
+      setBulkBanner(null)
+      setQueue((currentQueue) =>
+        currentQueue.map((item) =>
+          item.batchId && item.batchId === payload.notificationId
+            ? {
+                ...item,
+                status: "failed",
+                message: payload.error || payload.message,
+              }
+            : item
+        )
+      )
+    })
+
+    socket.on("notification:created", addRealtimeNotification)
+
     return () => socket.disconnect()
-  }, [fetchDocuments])
+  }, [addRealtimeNotification, fetchDocuments])
 
   const updateQueueItem = (id, patch) => {
     setQueue((currentQueue) =>
@@ -129,8 +199,56 @@ function App() {
     )
   }
 
+  const markNotificationRead = async (notificationId) => {
+    const target = notifications.find((notification) => notification._id === notificationId)
+
+    try {
+      const response = await fetch(`${API_URL}/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not update notification.")
+      }
+
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((notification) =>
+          notification._id === notificationId
+            ? normalizeNotification(data.notification)
+            : notification
+        )
+      )
+
+      if (target && !target.read) {
+        setUnreadCount((currentCount) => Math.max(currentCount - 1, 0))
+      }
+    } catch (error) {
+      setNotificationError(error.message)
+    }
+  }
+
+  const markAllNotificationsRead = async () => {
+    try {
+      const response = await fetch(`${API_URL}/notifications/read-all`, {
+        method: "PATCH",
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not update notifications.")
+      }
+
+      setNotifications((data.notifications || []).map(normalizeNotification))
+      setUnreadCount(0)
+    } catch (error) {
+      setNotificationError(error.message)
+    }
+  }
+
   const uploadFile = (item) => {
     const formData = new FormData()
+    formData.append("fileCount", "1")
     formData.append("documents", item.file)
 
     updateQueueItem(item.id, { status: "uploading", progress: 0, message: "" })
@@ -176,6 +294,7 @@ function App() {
   const uploadBulkFiles = (items, batchId) => {
     const formData = new FormData()
     formData.append("notificationId", batchId)
+    formData.append("fileCount", String(items.length))
     items.forEach((item) => formData.append("documents", item.file))
 
     markBatch(batchId, { status: "uploading", progress: 0, message: "" })
@@ -193,10 +312,14 @@ function App() {
 
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
-        markBatch(batchId, {
-          progress: 95,
-          message: "Waiting for server confirmation...",
-        }, { preserveComplete: true })
+        markBatch(
+          batchId,
+          {
+            progress: 95,
+            message: "Waiting for server confirmation...",
+          },
+          { preserveComplete: true }
+        )
         return
       }
 
@@ -289,10 +412,82 @@ function App() {
 
   return (
     <main className="page-shell">
+      <header className="app-header">
+        <div>
+          <p>Document workspace</p>
+          <h1>Uploads</h1>
+        </div>
+
+        <div className="notification-menu">
+          <button
+            className="notification-button"
+            type="button"
+            aria-label="Open notifications"
+            onClick={() => setIsNotificationPanelOpen((current) => !current)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2Z" />
+              <path d="M9.5 20a2.5 2.5 0 0 0 5 0" />
+            </svg>
+            {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+          </button>
+
+          {isNotificationPanelOpen && (
+            <section className="notification-panel">
+              <div className="notification-panel-header">
+                <div>
+                  <h2>Notifications</h2>
+                  <p>{unreadCount} unread</p>
+                </div>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={markAllNotificationsRead}
+                  disabled={!unreadCount}
+                >
+                  Mark all read
+                </button>
+              </div>
+
+              {notificationError && <p className="notification-error">{notificationError}</p>}
+
+              <div className="notification-list">
+                {notifications.length === 0 && (
+                  <p className="empty-state">No notifications yet.</p>
+                )}
+
+                {notifications.map((notification) => (
+                  <article
+                    className={`notification-item type-${notification.type}${
+                      notification.read ? "" : " is-unread"
+                    }`}
+                    key={notification._id}
+                  >
+                    <div>
+                      <strong>{notification.message}</strong>
+                      <p>{formatTime(notification.timestamp)}</p>
+                    </div>
+                    {!notification.read && (
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => markNotificationRead(notification._id)}
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </header>
+
       <div className="notification-stack">
         {bulkBanner && <div className="banner">{bulkBanner.message}</div>}
-        {notifications.map((notification) => (
-          <div className="toast" key={`${notification.timestamp}-${notification.message}`}>
+        {liveToasts.map((notification) => (
+          <div className={`toast type-${notification.type}`} key={notification._id}>
             <strong>{notification.message}</strong>
             <span>{formatTime(notification.timestamp)}</span>
           </div>
@@ -302,7 +497,7 @@ function App() {
       <section className="upload-section">
         <div className="section-title">
           <span>File Upload</span>
-          <h1>Upload PDF documents</h1>
+          <h2>Upload PDF documents</h2>
           <p>Choose one PDF or upload a batch. Each file is tracked separately.</p>
         </div>
 

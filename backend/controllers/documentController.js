@@ -59,6 +59,7 @@ export const uploadDocuments = async (req, res, next) => {
         error: error.message,
         notificationId: req.body?.notificationId || null,
       })
+      req.notificationCreated = true
     }
 
     return next(error)

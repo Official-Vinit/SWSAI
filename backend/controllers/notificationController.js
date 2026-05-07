@@ -1,11 +1,32 @@
 import Notification from "../models/Notification.js"
+import { createNotification } from "../services/notificationService.js"
 
 export const listNotifications = async (req, res, next) => {
   try {
-    const notifications = await Notification.find().sort({ createdAt: -1 })
+    const notifications = await Notification.find().sort({ timestamp: -1, createdAt: -1 })
     const unreadCount = await Notification.countDocuments({ read: false })
 
     return res.json({ notifications, unreadCount })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export const createSystemNotification = async (req, res, next) => {
+  try {
+    const { message, type = "info" } = req.body || {}
+
+    if (!message) {
+      return res.status(400).json({ message: "Notification message is required." })
+    }
+
+    const notification = await createNotification({
+      message,
+      type,
+      event: "notification:created",
+    })
+
+    return res.status(201).json({ notification })
   } catch (error) {
     return next(error)
   }
@@ -32,7 +53,7 @@ export const markNotificationRead = async (req, res, next) => {
 export const markAllNotificationsRead = async (req, res, next) => {
   try {
     await Notification.updateMany({ read: false }, { read: true })
-    const notifications = await Notification.find().sort({ createdAt: -1 })
+    const notifications = await Notification.find().sort({ timestamp: -1, createdAt: -1 })
 
     return res.json({ notifications, unreadCount: 0 })
   } catch (error) {
