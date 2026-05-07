@@ -1,5 +1,18 @@
-import fs from "fs"
+import crypto from "crypto"
 import Document from "../models/Document.js"
+
+const buildStoredName = (originalName) =>
+  `${Date.now()}-${crypto.randomUUID()}-${originalName.replace(/[^a-zA-Z0-9.-]/g, "_")}`
+
+const toDocumentResponse = (document) => ({
+  _id: document._id,
+  originalName: document.originalName,
+  storedName: document.storedName,
+  size: document.size,
+  mimeType: document.mimeType,
+  createdAt: document.createdAt,
+  updatedAt: document.updatedAt,
+})
 
 export const uploadDocuments = async (req, res, next) => {
   try {
@@ -12,14 +25,14 @@ export const uploadDocuments = async (req, res, next) => {
     const documents = await Document.insertMany(
       files.map((file) => ({
         originalName: file.originalname,
-        storedName: file.filename,
+        storedName: buildStoredName(file.originalname),
         size: file.size,
         mimeType: file.mimetype,
-        path: file.path,
+        data: file.buffer,
       }))
     )
 
-    return res.status(201).json({ documents })
+    return res.status(201).json({ documents: documents.map(toDocumentResponse) })
   } catch (error) {
     return next(error)
   }
@@ -27,7 +40,7 @@ export const uploadDocuments = async (req, res, next) => {
 
 export const listDocuments = async (req, res, next) => {
   try {
-    const documents = await Document.find().sort({ createdAt: -1 })
+    const documents = await Document.find().select("-data").sort({ createdAt: -1 })
     return res.json({ documents })
   } catch (error) {
     return next(error)
@@ -42,11 +55,18 @@ export const downloadDocument = async (req, res, next) => {
       return res.status(404).json({ message: "Document not found." })
     }
 
-    if (!fs.existsSync(document.path)) {
-      return res.status(404).json({ message: "Stored file not found." })
+    if (!document.data) {
+      return res.status(404).json({ message: "Stored file data not found." })
     }
 
-    return res.download(document.path, document.originalName)
+    res.setHeader("Content-Type", document.mimeType)
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(document.originalName)}"`
+    )
+    res.setHeader("Content-Length", document.size)
+
+    return res.send(document.data)
   } catch (error) {
     return next(error)
   }

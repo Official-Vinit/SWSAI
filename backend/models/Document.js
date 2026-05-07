@@ -19,8 +19,8 @@ const documentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    path: {
-      type: String,
+    data: {
+      type: Buffer,
       required: true,
     },
   },
